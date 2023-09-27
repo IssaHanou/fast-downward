@@ -9,6 +9,11 @@ For more details, check the repository history
 (<https://issues.fast-downward.org>). Repository branches are named
 after the corresponding tracker issues.
 
+# My own changes
+
+- add `dump_dot()` function to `landmark_graph.h` (copied from [DALAI](https://github.com/ipc2023-classical/planner4/))
+- changed `dump_landmark_graph` to write to `landmarks.out` instead of printing when debug is toggled
+
 ## Fast Downward 23.06
 
 Released on July 31, 2023.

@@ -77,8 +77,13 @@ shared_ptr<LandmarkGraph> LandmarkFactory::compute_lm_graph(
         }
     }
 
-    if (log.is_at_least_debug()) {
-        dump_landmark_graph(task_proxy, *lm_graph, log);
+    string filename = "landmarks.out";
+    ofstream lm_file;
+    lm_file.open(filename);
+
+    // TODO took out all check for debug levels
+    if (lm_file) {
+        dump_landmark_graph(task_proxy, *lm_graph, log, lm_file);
     }
     return lm_graph;
 }

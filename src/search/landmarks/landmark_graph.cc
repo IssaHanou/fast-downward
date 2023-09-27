@@ -8,6 +8,7 @@
 #include <list>
 #include <set>
 #include <sstream>
+#include <fstream>
 #include <vector>
 
 using namespace std;
@@ -177,4 +178,42 @@ void LandmarkGraph::set_landmark_ids() {
         ++id;
     }
 }
+
+void LandmarkGraph::dump_dot() const {
+    string filename = "landmarks.out";
+    ofstream lm_file;
+    lm_file.open(filename);
+
+    lm_file << "digraph graphname {\n";
+    for (size_t id = 0; id < nodes.size(); ++id) {
+        const LandmarkNode *lmn = nodes[id].get();
+        lm_file << "  lm" << id << " [label=\"<";
+        for (const FactPair &fact: lmn->get_landmark().facts) {
+            lm_file << fact.var << "=" << fact.value << " ";
+        }
+        lm_file << "-- fa: ";
+        for (int op_id: lmn->get_landmark().first_achievers) {
+            lm_file << op_id << " ";
+        }
+        lm_file << "-- pa: ";
+        for (int op_id: lmn->get_landmark().possible_achievers) {
+            lm_file << op_id << " ";
+        }
+        lm_file << ">\"];\n";
+    }
+    lm_file << "\n";
+    for (size_t id = 0; id < nodes.size(); ++id) {
+        for (pair<LandmarkNode *, EdgeType> elem: nodes[id].get()->children) {
+            lm_file << " lm" << id << " -> lm" << elem.first->get_id();
+            if (elem.second < EdgeType::NATURAL) {
+                lm_file << " [style=dotted]";
+            }
+            lm_file << ";\n";
+        }
+    }
+    lm_file << "}" << endl;
+    cout << "Wrote landmark graph to `landmarks.out` " << endl;
+    lm_file.close();
+}
+
 }

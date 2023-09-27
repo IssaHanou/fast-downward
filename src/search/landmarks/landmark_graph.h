@@ -149,6 +149,8 @@ public:
     /* This is needed only by landmark graph factories and will disappear
        when moving landmark graph creation there. */
     void set_landmark_ids();
+
+    void dump_dot() const;
 };
 }
 
