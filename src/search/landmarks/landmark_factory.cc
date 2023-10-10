@@ -77,14 +77,25 @@ shared_ptr<LandmarkGraph> LandmarkFactory::compute_lm_graph(
         }
     }
 
+    // Write to file
     string filename = "landmarks.out";
     ofstream lm_file;
     lm_file.open(filename);
-
     // TODO took out all check for debug levels
     if (lm_file) {
         dump_landmark_graph(task_proxy, *lm_graph, log, lm_file);
     }
+
+
+    // Read from file
+    filename = "landmarks_test.out";
+    utils::Timer lm_reconstruction_timer;
+    ifstream new_lms;
+    new_lms.open(filename);
+    if (new_lms) {
+        read_landmark_graph(task_proxy, new_lms, *lm_graph);
+    }
+    log << "Landmark graph reconstruction time: " << lm_reconstruction_timer  << endl;
     return lm_graph;
 }
 

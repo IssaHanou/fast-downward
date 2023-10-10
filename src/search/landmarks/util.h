@@ -27,11 +27,19 @@ extern bool possibly_reaches_lm(
 extern OperatorProxy get_operator_or_axiom(const TaskProxy &task_proxy, int op_or_axiom_id);
 extern int get_operator_or_axiom_id(const OperatorProxy &op);
 
+// Processing landmark files for altering them
 extern void dump_landmark_graph(
-    const TaskProxy &task_proxy,
+    TaskProxy &task_proxy,
     const LandmarkGraph &graph,
     utils::LogProxy &log,
     std::ofstream &output);
+
+extern LandmarkGraph read_landmark_graph(
+    TaskProxy &task_proxy,
+    std::ifstream &input,
+    LandmarkGraph &graph);
+
 }
+
 
 #endif

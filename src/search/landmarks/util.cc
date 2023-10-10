@@ -86,7 +86,7 @@ int get_operator_or_axiom_id(const OperatorProxy &op) {
   at least, but without the time and memory stamps.
 */
 static void dump_node(
-    const TaskProxy &task_proxy,
+    TaskProxy &task_proxy,
     const LandmarkNode &node,
     utils::LogProxy &log,
     std::ofstream &output) {
@@ -102,7 +102,8 @@ static void dump_node(
             }
         }
         first = false;
-        VariableProxy var = task_proxy.get_variables()[fact.var];
+        // Variable is first argument of predicate, value is second. Value 0 for unary predicates. Extra variable for predicates without arguments, e.g. blocksworld 6 blocks -> 6 variables, handempty = var7
+        VariableProxy var = task_proxy.get_variables()[fact.var];      
         output << var.get_fact(fact.value).get_name();
     }
     output << "\"";
@@ -135,7 +136,7 @@ static void dump_edge(int from, int to, EdgeType edge, utils::LogProxy &log, std
 }
 
 void dump_landmark_graph(
-    const TaskProxy &task_proxy,
+    TaskProxy &task_proxy,
     const LandmarkGraph &graph,
     utils::LogProxy &log,
     std::ofstream &output) {
@@ -153,4 +154,177 @@ void dump_landmark_graph(
     output << "}" << endl;
     log << "Landmark graph end." << endl;
 }
+
+std::pair<int, int> find_facts(TaskProxy task_proxy, string name) {
+    int var = -1;
+    int val = -1;
+    for (size_t i = 0; i < task_proxy.get_variables().size(); i++) {
+        for (int j = 0; j < task_proxy.get_variables()[i].get_domain_size(); j++) {
+            string tmp = task_proxy.get_variables()[i].get_fact(j).get_name();
+            // TODO can only handle 0, 1 or 2 parameters in predicate
+            // Check if same variable (first parameter)
+            if (name.find(", ") != std::string::npos) {
+                // Check the variable = first parameter of predicate
+                if (name.substr(name.find("(") + 1, name.find(", ") - name.find("(") - 1)
+                    == tmp.substr(tmp.find("(") + 1, tmp.find(", ") - tmp.find("(") - 1)) {
+                    var = i;
+                }
+                // Check the value = second parameter of predicate
+                if (name.substr(name.find(", ") + 2, name.find(")") - name.find(", ") - 2)
+                    == tmp.substr(tmp.find(", ") + 2, tmp.find(")") - tmp.find(", ") - 2)) {
+                    val = j;
+                }   
+            } else if (name.find("()") && name == tmp) {
+                var = i;
+                val = j;
+            } else {
+                // Check the variable = first parameter of predicate
+                if (name.substr(name.find("(") + 1, name.find(")") - name.find("(") - 1)
+                    == tmp.substr(tmp.find("(") + 1, tmp.find(")") - tmp.find("(") - 1)) {
+                    var = i;
+                }
+            }
+        }
+    } 
+    return std::make_pair(var, val);
+}
+
+vector<size_t> get_positions(string line, string sub) {
+    vector<size_t> positions;
+    size_t pos = line.find(sub, 0);
+    while (pos != string::npos) {
+        positions.push_back(pos);
+        pos = line.find(sub, pos+1);
+    }
+    return positions;
+}
+
+Landmark read_node(const string &line, TaskProxy &task_proxy, LandmarkGraph &graph) {
+    bool disjunctive = line.find(" | ") != std::string::npos;
+    bool conjunctive = line.find(" & ") != std::string::npos;
+    std::vector<FactPair> facts;
+    string name;
+
+
+    if (disjunctive || conjunctive) {
+        vector<size_t> positions;
+        if (disjunctive) {
+            positions = get_positions(line, " | ");
+        } else {
+            positions = get_positions(line, " & ");
+        }
+        for (size_t pos = 0; pos <= positions.size(); pos++) {
+            if (pos == 0) {
+                name = line.substr(line.find("label=") + 7, positions[0] - line.find("label=") - 7);
+            } else if (pos < positions.size()) {
+                name = line.substr(positions[pos-1] + 3, positions[pos] - positions[pos-1] - 3);
+            } else {
+                name = line.substr(positions[pos-1] + 3, line.find("];") - positions[pos-1] - 4);
+            }
+            auto [i,j] = find_facts(task_proxy, name);
+            if (i >= 0 && j >= 0) {
+                const FactProxy& ref = task_proxy.get_variables()[i].get_fact(j);
+                facts.push_back(ref.get_pair());
+            } else if (i < 0) {
+                facts.push_back(FactPair(task_proxy.get_variables().size() + 1, j));
+            } else if (j < 0) {
+                facts.push_back(FactPair(i, task_proxy.get_variables()[0].get_domain_size() + 1));
+            }
+        }
+    // Single landmark
+    } else {
+        if (line.find("style") != std::string::npos) {
+            name = line.substr(line.find("label=") + 7, line.find(", style") - line.find("label=") - 8);
+        } else {
+            name = line.substr(line.find("label=") + 7, line.find("];") - line.find("label=") - 8);
+        }
+        auto [i,j] = find_facts(task_proxy, name);
+        if (i >= 0 && j >= 0) {
+            const FactProxy& ref = task_proxy.get_variables()[i].get_fact(j);
+            facts.push_back(ref.get_pair());
+        // TODO cannot update the const of these sizes.
+        } else if (i < 0) {
+            facts.push_back(FactPair(task_proxy.get_variables().size() + 1, j));
+        } else if (j < 0) {
+            facts.push_back(FactPair(i, task_proxy.get_variables()[0].get_domain_size() + 1));
+        }
+    }
+    Landmark landmark = Landmark(facts, disjunctive, conjunctive);
+    string node_id = line.substr(line.find("lm") + 2, line.find(" [") - line.find("lm") - 2);
+    cout << "Found landmark with id " << node_id << ": " << landmark.facts << endl;
+
+    if (line.find("style=filled") != std::string::npos) {
+        landmark.is_true_in_goal = true;
+    }
+
+    if (disjunctive) {
+        std::set<FactPair> fact_set(landmark.facts.begin(), landmark.facts.end());
+        if (!graph.contains_identical_disjunctive_landmark(fact_set)) {
+            graph.add_landmark(std::move(landmark));
+        }
+    } else if (conjunctive) {
+        bool contains = true;
+        for (size_t f = 0; f < size(landmark.facts); f++) {
+            if (!graph.contains_landmark(landmark.facts[f])) {
+                contains = false;
+            }
+        }
+        if (!contains) {
+            graph.add_landmark(std::move(landmark));
+        }
+    } else {
+        if (!graph.contains_simple_landmark(landmark.facts[0])) {
+            graph.add_landmark(std::move(landmark));
+        }
+    }
+    return landmark; 
+}
+
+static EdgeType read_edge(const string &line) {
+    string from_id = line.substr(line.find("lm") + 2, line.find(" ->") - line.find("lm") - 2);
+    string to_id = line.substr(line.find("-> lm") + 5, line.find(" [") - line.find("-> lm") - 5);
+    string edge_type = line.substr(line.find("label=") + 7, line.find("]") - line.find("label=") - 8);
+
+    // Edges cannot be added to the graph. They are generated in the Factories.
+    // so this code is not used.
+    EdgeType type;
+    if (edge_type ==  "\"nec\"") {
+        type = EdgeType::NECESSARY;
+    } else if (edge_type == "\"gn\"") {
+        type =  EdgeType::GREEDY_NECESSARY;
+    } else if (edge_type == "\"n\"") {
+        type = EdgeType::NATURAL;
+    } else {
+        type =  EdgeType::REASONABLE;
+    }
+    return type;
+}
+
+LandmarkGraph read_landmark_graph(TaskProxy &task_proxy, std::ifstream &input, LandmarkGraph &graph) {
+    LandmarkGraph g;
+    string line;
+    cout << "==========================Now reading graph=========================" << endl;
+    if (input.is_open()) {
+        std::getline(input, line); // skip first line with 'digraph {'
+        std::getline(input, line);
+        while (input.good() && line.find("}") == std::string::npos) {
+            if (line.find("->") == std::string::npos) {
+                Landmark lm = read_node(line, task_proxy, graph);
+            } else {
+                // Edges do not add anything.
+                read_edge(line);
+            }
+            std::getline(input, line);
+        }
+        // Reset the ids
+        g.set_landmark_ids();
+    }
+
+    return g;
+}
+
+
+
+
+
 }
